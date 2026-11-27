@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get HTML</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --bg: #000000; --panel: #0a0a0a; --line: #1f1f1f; --text: #ffffff; --muted: #8a8a8a; --dim: #555555; }
+    body { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px 20px; line-height: 1.5; }
+    .container { max-width: 900px; margin: 0 auto; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 32px; }
+    h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: 0.02em; }
+    h1 span { color: var(--dim); font-weight: 400; }
+    .sub { color: var(--muted); font-size: 0.8rem; margin-top: 6px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    input[type="url"] { flex: 1; min-width: 200px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 0; color: var(--text); font-family: inherit; font-size: 0.9rem; }
+    input[type="url"]::placeholder { color: var(--dim); }
+    input[type="url"]:focus { outline: none; border-color: var(--text); }
+    button { padding: 14px 22px; background: var(--text); color: var(--bg); border: 1px solid var(--text); border-radius: 0; font-family: inherit; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+    button:hover:not(:disabled) { background: var(--bg); color: var(--text); }
+    button:disabled { opacity: 0.3; cursor: not-allowed; }
+    button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+    button.ghost:hover { background: var(--panel); color: var(--text); border-color: #333; }
+    .options { display: flex; gap: 24px; margin-top: 16px; font-size: 0.8rem; color: var(--muted); flex-wrap: wrap; }
+    .options label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .options input[type="checkbox"] { appearance: none; width: 14px; height: 14px; border: 1px solid #333; background: transparent; cursor: pointer; position: relative; }
+    .options input[type="checkbox"]:checked { background: var(--text); border-color: var(--text); }
+    .options input[type="checkbox"]:checked::after { content: ""; position: absolute; inset: 2px; background: var(--bg); }
+    .meta { display: flex; gap: 20px; flex-wrap: wrap; margin: 24px 0 16px; font-size: 0.75rem; color: var(--muted); padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .meta b { color: var(--text); font-weight: 500; }
+    .tabs { display: flex; gap: 0; margin-top: 24px; border-bottom: 1px solid var(--line); }
+    .tabs button { background: transparent; color: var(--dim); border: none; border-bottom: 1px solid transparent; padding: 10px 16px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; margin-bottom: -1px; }
+    .tabs button.active { color: var(--text); border-bottom-color: var(--text); }
+    pre { background: var(--panel); border: 1px solid var(--line); padding: 20px; max-height: 60vh; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.8rem; line-height: 1.7; color: var(--muted); }
+    .actions { display: flex; gap: 8px; margin-top: 16px; }
+    .error { background: var(--panel); border: 1px solid #333; border-left: 2px solid var(--text); color: var(--text); padding: 14px 16px; margin-top: 20px; font-size: 0.8rem; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>get_html <span>/ v1.0</span></h1>
+      <p class="sub">ambil html mentah dari url mana pun</p>
+    </header>
+    <form id="form" class="row">
+      <input id="url" type="url" placeholder="https://example.com" required autocomplete="off" />
+      <button type="submit" id="btn">Ambil</button>
+    </form>
+    <div class="options">
+      <label><input type="checkbox" id="extractText" /> ekstrak teks & meta</label>
+      <label><input type="checkbox" id="mobileUA" /> user-agent mobile</label>
+    </div>
+    <div id="meta" class="meta hidden"></div>
+    <div id="errorBox" class="error hidden"></div>
+    <div id="result" class="hidden">
+      <div class="tabs">
+        <button data-tab="html" class="active">HTML</button>
+        <button data-tab="text" id="tabText">Teks</button>
+      </div>
+      <pre id="output"></pre>
+      <div class="actions">
+        <button type="button" class="ghost" id="copyBtn">Copy</button>
+        <button type="button" class="ghost" id="downloadBtn">Download</button>
+      </div>
+    </div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let lastResult = null;
+    let activeTab = 'html';
+    $('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = $('url').value.trim();
+      if (!url) return;
+      $('btn').disabled = true;
+      $('btn').textContent = '...';
+      $('errorBox').classList.add('hidden');
+      $('meta').classList.add('hidden');
+      $('result').classList.add('hidden');
+      try {
+        const resp = await fetch('/api/get-html', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            extractText: $('extractText').checked,
+            userAgent: $('mobileUA').checked ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1' : undefined
+          })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
+        lastResult = data;
+        renderResult();
+      } catch (err) {
+        $('errorBox').textContent = 'error: ' + err.message;
+        $('errorBox').classList.remove('hidden');
+      } finally {
+        $('btn').disabled = false;
+        $('btn').textContent = 'Ambil';
+      }
+    });
+    function renderResult() {
+      const d = lastResult;
+      activeTab = 'html';
+      $('tabText').style.display = d.text ? 'inline-block' : 'none';
+      $('meta').innerHTML = '<span>url: <b>' + escapeHtml(d.url) + '</b></span><span>status: <b>' + d.status + '</b></span><span>size: <b>' + (d.size / 1024).toFixed(1) + ' KB</b></span>' + (d.title ? '<span>title: <b>' + escapeHtml(d.title) + '</b></span>' : '');
+      $('meta').classList.remove('hidden');
+      document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === activeTab));
+      $('output').textContent = d.html;
+      $('result').classList.remove('hidden');
+    }
+    document.querySelectorAll('.tabs button').forEach(b => {
+      b.addEventListener('click', () => {
+        if (!lastResult) return;
+        activeTab = b.dataset.tab;
+        document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
+        $('output').textContent = activeTab === 'html' ? lastResult.html : (lastResult.text || '');
+      });
+    });
+    $('copyBtn').addEventListener('click', async () => {
+      if (!lastResult) return;
+      const content = activeTab === 'html' ? lastResult.html : (lastResult.text || '');
+      try { await navigator.clipboard.writeText(content); $('copyBtn').textContent = 'Copied'; setTimeout(() => ($('copyBtn').textContent = 'Copy'), 1500); } catch { alert('Gagal copy'); }
+    });
+    $('downloadBtn').addEventListener('click', () => {
+      if (!lastResult) return;
+      const isHtml = activeTab === 'html';
+      const content = isHtml ? lastResult.html : (lastResult.text || '');
+      const blob = new Blob([content], { type: isHtml ? 'text/html' : 'text/plain' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = isHtml ? 'page.html' : 'page.txt'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+    function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+  </script>
+</body>
+</html>
